@@ -1,7 +1,14 @@
 # Water Leak Detection
 
-Behavior-based, explainable water-tank leak detection from a single `water_level`
-signal. Built on the `test.ipynb` POC.
+Behavior-based, explainable leak detection from a single measurement signal —
+either `water_level` or `pressure_level`. Built on the `test.ipynb` POC.
+
+The pipeline is **signal-agnostic**: the CSV loader is the only stage that knows
+which measurement was uploaded. It renames the detected column to a generic
+`signal`, and every stage after it (preprocessing, event extraction, profiling,
+Rules A/B/C, scoring) operates on `signal` / `signal_smooth` with identical logic
+and identical thresholds. A leak drives both level and pressure downward, so no
+branching on signal type exists anywhere in the detection code.
 
 Two FastAPI endpoints:
 
@@ -15,13 +22,18 @@ Two FastAPI endpoints:
 ## CSV schema
 
 ```
-datetime,water_level
-2025-04-01 00:00:00,4.000
-...
+datetime,water_level          |   datetime,pressure_level
+2025-04-01 00:00:00,4.000     |   2025-04-01 00:00:00,4.000
+...                           |   ...
 ```
 
 - 5-minute sampling cadence (configurable).
-- Headers must contain `datetime` and `water_level`.
+- Headers must contain `datetime` plus **exactly one** measurement column:
+  `water_level` **or** `pressure_level`. Both present, or neither, is a 422.
+- The detected column is recorded as the profile's `signal_type`. `/v1/detect`
+  returns 422 if the uploaded CSV's signal type differs from the one the profile
+  was learned on — level and pressure share no scale, so mixing them would
+  silently produce meaningless confidence.
 
 ## Run
 
@@ -86,11 +98,14 @@ At startup the app sweeps any `pending`/`running` meta older than
 
 ## Configuration
 
-All tunables live in `src/.env/.env` (loaded by pydantic-settings). No
+All tunables live in `src/.env` (loaded by pydantic-settings). No
 `os.getenv()` calls in code. Key fields:
 
 | Field | Default | Meaning |
 |---|---|---|
+| `signal_source_columns` | `("water_level", "pressure_level")` | accepted CSV measurement columns; exactly one must be present |
+| `signal_column` | `signal` | canonical internal column name the whole pipeline uses |
+| `sensor_deadband` | 0.005 | movement below this is `flat`. **Magnitude-dependent** — retune for a pressure deployment, whose units differ from level |
 | `min_learn_days` | 25 | reject learn CSVs shorter than this |
 | `min_detect_minutes` | 1440 | reject detect CSVs shorter than this |
 | `max_upload_mb` | 50 | upload size cap |

@@ -7,14 +7,20 @@ import numpy as np
 import pandas as pd
 
 SRC_CADENCE_MIN = 5  # 300 s
+DEFAULT_SIGNAL_COLUMN = "water_level"
 
 
 def make_series(
     n_days: int = 30,
     seed: int = 42,
     cadence_min: int = SRC_CADENCE_MIN,
+    column: str = DEFAULT_SIGNAL_COLUMN,
 ) -> pd.DataFrame:
-    """Synthetic 5-min water_level series: daily morning + afternoon draw + nightly idle."""
+    """Synthetic 5-min signal series: daily morning + afternoon draw + nightly idle.
+
+    `column` names the measurement column, so the same series can be emitted as a
+    water_level CSV or a pressure_level CSV.
+    """
     rng = np.random.default_rng(seed)
     start = datetime(2025, 4, 1, 0, 0, 0)
     cadence = timedelta(minutes=cadence_min)
@@ -45,7 +51,7 @@ def make_series(
         if hour == 4 and minute < cadence_min and lvl < 2.5:
             lvl = 4.0
         level.append(round(lvl, 4))
-    return pd.DataFrame({"datetime": timestamps, "water_level": level})
+    return pd.DataFrame({"datetime": timestamps, column: level})
 
 
 def df_to_csv_bytes(df: pd.DataFrame) -> bytes:
@@ -64,15 +70,19 @@ def slice_day(df: pd.DataFrame, day_index: int = 0) -> pd.DataFrame:
 
 
 def inject_slow_leak(
-    df: pd.DataFrame, start_hour: int = 22, duration_min: int = 300, rate: float = 0.006
+    df: pd.DataFrame,
+    start_hour: int = 22,
+    duration_min: int = 300,
+    rate: float = 0.006,
+    column: str = DEFAULT_SIGNAL_COLUMN,
 ) -> pd.DataFrame:
-    """Add a downward ramp onto the day's water_level starting at start_hour."""
+    """Add a downward ramp onto the day's signal starting at start_hour."""
     out = df.copy()
     dt = pd.to_datetime(out["datetime"])
     start_ts = dt.iloc[0].replace(hour=start_hour, minute=0, second=0)
     end_ts = start_ts + timedelta(minutes=duration_min)
     mask = (dt >= start_ts) & (dt <= end_ts)
     elapsed = (dt[mask] - start_ts).dt.total_seconds().to_numpy() / 60.0
-    out.loc[mask, "water_level"] = out.loc[mask, "water_level"].to_numpy() - rate * elapsed
-    out["water_level"] = out["water_level"].clip(lower=0.0)
+    out.loc[mask, column] = out.loc[mask, column].to_numpy() - rate * elapsed
+    out[column] = out[column].clip(lower=0.0)
     return out

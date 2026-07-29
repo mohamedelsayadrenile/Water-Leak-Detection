@@ -78,19 +78,19 @@ def rule_b(df_in: pd.DataFrame, profile: dict, cfg: Settings) -> list[Alert]:
     for _, g in df_in.groupby(runs):
         if not isq[g.index[0]]:
             continue
-        lvl = g["level_smooth"].dropna()
-        if len(lvl) < 12:
+        sig = g["signal_smooth"].dropna()
+        if len(sig) < 12:
             continue
-        mins = (lvl.index - lvl.index[0]).total_seconds().to_numpy() / 60.0
+        mins = (sig.index - sig.index[0]).total_seconds().to_numpy() / 60.0
         win_len = int(cfg.rule_b_min_quiet_hours * 60)
         step_samples = int(cfg.rule_b_step_minutes // 5)
         win_samples = int(win_len // 5)
-        for w0 in range(0, len(lvl) - win_samples + 1, step_samples):
+        for w0 in range(0, len(sig) - win_samples + 1, step_samples):
             w1 = w0 + win_samples
-            if w1 > len(lvl):
-                w1 = len(lvl)
+            if w1 > len(sig):
+                w1 = len(sig)
             x = mins[w0:w1]
-            y = lvl.to_numpy()[w0:w1]
+            y = sig.to_numpy()[w0:w1]
             if len(x) < 10:
                 continue
             res = linregress(x, y)
@@ -101,10 +101,10 @@ def rule_b(df_in: pd.DataFrame, profile: dict, cfg: Settings) -> list[Alert]:
             score = significance * strength
             if score < cfg.rule_min_score:
                 continue
-            ts_start = lvl.index[w0]
-            ts_end = lvl.index[w1 - 1]
+            ts_start = sig.index[w0]
+            ts_end = sig.index[w1 - 1]
             reason = (
-                f"Rule B: slow drain {res.slope:.5f} lvl/min over "
+                f"Rule B: slow drain {res.slope:.5f} signal/min over "
                 f"{(w1 - w0 - 1) * 5} min from {ts_start.time()} "
                 f"(p={res.pvalue:.2e}, baseline {baseline:.5f})"
             )

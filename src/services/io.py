@@ -15,23 +15,37 @@ def parse_csv(
     expected_min_days: int | None = None,
     expected_min_minutes: int | None = None,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
-    """Parse, validate, clean cadence. Returns (df indexed by datetime, summary)."""
+    """Parse, validate, clean cadence. Returns (df indexed by datetime, summary).
+
+    This is the only stage that knows which measurement the CSV carried. The
+    detected source column is renamed to `cfg.signal_column` and the rest of the
+    pipeline operates on that generic name; the original name is reported back as
+    `summary["signal_type"]` so the caller can pin a profile to its signal.
+    """
     try:
         raw = pd.read_csv(io.BytesIO(file_bytes), parse_dates=["datetime"])
     except Exception as exc:
         raise ValidationError(f"unreadable CSV: {exc}") from exc
 
-    required = {"datetime", "water_level"}
-    missing = required - set(raw.columns)
-    if missing:
-        raise ValidationError(f"missing required columns: {sorted(missing)}")
+    if "datetime" not in raw.columns:
+        raise ValidationError("missing required columns: ['datetime']")
+
+    present = [c for c in cfg.signal_source_columns if c in raw.columns]
+    if len(present) != 1:
+        raise ValidationError(
+            f"missing required columns: CSV must contain exactly one of "
+            f"{list(cfg.signal_source_columns)}; found {present}"
+        )
+    signal_type = present[0]
+    raw = raw.rename(columns={signal_type: cfg.signal_column})
+    signal = cfg.signal_column
 
     if raw["datetime"].isna().any():
         raise ValidationError("datetime column contains null values")
 
-    if raw["water_level"].isna().any():
+    if raw[signal].isna().any():
         # interpolate small gaps AFTER reindex; for now reject fully-missing rows
-        n_missing = int(raw["water_level"].isna().sum())
+        n_missing = int(raw[signal].isna().sum())
     else:
         n_missing = 0
 
@@ -51,12 +65,12 @@ def parse_csv(
     expected_td = pd.Timedelta(seconds=cfg.sampling_interval_seconds)
     df = raw.set_index("datetime").sort_index()
     df = df.asfreq(expected_td)
-    n_gaps = int(df["water_level"].isna().sum())
+    n_gaps = int(df[signal].isna().sum())
     n_filled = 0
     if n_gaps:
         n_filled = min(n_gaps, 3 * int(n_gaps))
-        df["water_level"] = df["water_level"].interpolate(method="time", limit=3)
-        still_nan = int(df["water_level"].isna().sum())
+        df[signal] = df[signal].interpolate(method="time", limit=3)
+        still_nan = int(df[signal].isna().sum())
         if still_nan:
             raise ValidationError(
                 f"unfillable gaps in series: {still_nan} samples still NaN after "
@@ -64,6 +78,7 @@ def parse_csv(
             )
 
     summary: dict[str, Any] = {
+        "signal_type": signal_type,
         "rows": int(len(df)),
         "start": df.index[0].isoformat(),
         "end": df.index[-1].isoformat(),
@@ -72,9 +87,9 @@ def parse_csv(
         "duplicate_rows": n_dup,
         "missing_values": n_missing + n_gaps,
         "filled_gaps": n_filled,
-        "level_min": float(df["water_level"].min()),
-        "level_max": float(df["water_level"].max()),
-        "level_mean": float(df["water_level"].mean()),
+        "signal_min": float(df[signal].min()),
+        "signal_max": float(df[signal].max()),
+        "signal_mean": float(df[signal].mean()),
         "span_days": float((df.index[-1] - df.index[0]).total_seconds() / 86400.0),
         "span_minutes": float((df.index[-1] - df.index[0]).total_seconds() / 60.0),
     }

@@ -6,10 +6,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    # signal (the pipeline is signal-agnostic; the CSV loader is the only stage that
+    # knows which of these source columns the upload actually carried)
+    signal_source_columns: tuple[str, ...] = ("water_level", "pressure_level")
+    signal_column: str = "signal"
+
     # physical / sensor
     sampling_interval_seconds: int = 300
-    tank_height: float = 4.0
-    tank_area: float | None = None
+    # magnitude-dependent: tune per signal type (metres of level vs bar of pressure)
     sensor_deadband: float = 0.005
 
     # cleaning
@@ -54,7 +58,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     model_config = SettingsConfigDict(
-        env_file="src/.env/.env",
+        env_file="src/.env",
         env_file_encoding="utf-8",
         extra="ignore",
     )

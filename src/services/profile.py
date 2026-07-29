@@ -62,7 +62,7 @@ def build_profile(events: pd.DataFrame, df_clean: pd.DataFrame, cfg: Settings) -
     }
 
     quiet_mask = df_clean.index.hour.isin(quiet_hours)
-    qs = df_clean.loc[quiet_mask & ~df_clean["is_refill"], "level_smooth"].dropna()
+    qs = df_clean.loc[quiet_mask & ~df_clean["is_refill"], "signal_smooth"].dropna()
     slopes: list[float] = []
     if len(qs) > 12:
         for w_start in range(0, len(qs) - 12, 12):
@@ -86,6 +86,7 @@ def build_profile(events: pd.DataFrame, df_clean: pd.DataFrame, cfg: Settings) -
 
 def make_profile_summary(profile: dict, n_events: int) -> dict:
     return {
+        "signal_type": profile.get("signal_type"),
         "n_days": profile["n_days"],
         "quiet_hours": profile["quiet_hours"],
         "global_duration": profile["global_duration"],

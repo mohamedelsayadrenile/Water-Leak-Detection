@@ -33,6 +33,7 @@ def test_learn_happy_path(clean_env):
     meta = _wait_until_ready(client, pid)
     assert meta["status"] == "ready", meta
     assert meta["summary"]["n_days"] == 30
+    assert meta["summary"]["signal_type"] == "water_level"
     assert isinstance(meta["summary"]["quiet_hours"], list)
 
     # profile file should exist now, csv uploaded removed

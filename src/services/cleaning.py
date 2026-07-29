@@ -33,15 +33,15 @@ def detect_refill(movement: pd.Series, consecutive_pos: int) -> np.ndarray:
     return refill_mask
 
 
-def clean(level_series: pd.Series, cfg: Settings) -> pd.DataFrame:
+def clean(signal_series: pd.Series, cfg: Settings) -> pd.DataFrame:
     """Stage 2 of the POC: smoothing + movement + refill mask.
 
-    `level_series` must be a datetime-indexed Series of water_level (raw).
-    Returns a DataFrame indexed the same, with columns:
-    level_raw, level_smooth, movement, is_refill.
+    `signal_series` must be a datetime-indexed Series of the raw signal, whatever
+    the source measurement was. Returns a DataFrame indexed the same, with columns:
+    signal_raw, signal_smooth, movement, is_refill.
     """
-    level = level_series.astype(float)
-    smoothed = level.rolling(window=cfg.rolling_window, center=True, min_periods=1).median()
+    signal = signal_series.astype(float)
+    smoothed = signal.rolling(window=cfg.rolling_window, center=True, min_periods=1).median()
 
     delta = smoothed.diff()
     movement = classify_movement(delta, cfg.sensor_deadband)
@@ -49,10 +49,10 @@ def clean(level_series: pd.Series, cfg: Settings) -> pd.DataFrame:
 
     return pd.DataFrame(
         {
-            "level_raw": level,
-            "level_smooth": smoothed,
+            "signal_raw": signal,
+            "signal_smooth": smoothed,
             "movement": movement,
             "is_refill": refill_mask,
         },
-        index=level_series.index,
+        index=signal_series.index,
     )

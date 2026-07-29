@@ -5,7 +5,7 @@ import asyncio
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from src.core.config import settings
-from src.core.errors import ProfileNotFound
+from src.core.errors import ProfileNotFound, ValidationError
 from src.core.helper import _build_detect_sync
 from src.core.logging import get_logger
 from src.models.schemas.common import AlertOut
@@ -51,11 +51,11 @@ async def detect(
         alerts, n_events, confidence = await asyncio.to_thread(_build_detect_sync, data, profile)
     except ProfileNotFound as exc:
         raise HTTPException(status_code=404, detail=f"profile not found: {profile_id}") from exc
+    except ValidationError as exc:
+        # bad CSV schema/cadence/length, or a signal type the profile wasn't learned on
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:
-        # Validation errors from parse_csv -> 422
         msg = str(exc)
-        if "missing required columns" in msg or "irregular cadence" in msg or "too short" in msg:
-            raise HTTPException(status_code=422, detail=msg) from exc
         logger.exception("detect.failed", extra={"profile_id": profile_id})
         raise HTTPException(status_code=500, detail=f"detection failed: {msg}") from exc
 

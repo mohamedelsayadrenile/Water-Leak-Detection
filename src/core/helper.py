@@ -25,11 +25,19 @@ def _iso(ts: pd.Timestamp) -> str:
 
 
 def _check_header(peek: bytes) -> None:
+    """Cheap header sniff on upload; parse_csv does the strict exactly-one check."""
+    from src.core.config import settings
+
     first_line = peek.split(b"\n", 1)[0].decode("utf-8", errors="ignore").lower()
-    if "datetime" not in first_line or "water_level" not in first_line:
+    if "datetime" not in first_line or not any(
+        c in first_line for c in settings.signal_source_columns
+    ):
         raise HTTPException(
             status_code=422,
-            detail="CSV header must contain columns: datetime, water_level",
+            detail=(
+                "CSV header must contain 'datetime' and exactly one of: "
+                + ", ".join(settings.signal_source_columns)
+            ),
         )
 
 
@@ -60,28 +68,48 @@ def _build_profile_sync(profile_id: str, upload_path: Path) -> tuple[dict, dict]
     from src.services.io import parse_csv
     from src.services.profile import build_profile, make_profile_summary
 
-    df, _ = parse_csv(
+    df, parse_summary = parse_csv(
         upload_path.read_bytes(),
         settings,
         expected_min_days=settings.min_learn_days,
     )
-    level_series = df["water_level"].astype(float)
-    df_clean = clean(level_series, settings)
+    signal_series = df[settings.signal_column].astype(float)
+    df_clean = clean(signal_series, settings)
     events = extract_events(df_clean, settings)
     profile = build_profile(events, df_clean, settings)
+    # stamped here, not in build_profile, so the profiling stage stays signal-agnostic
+    profile["signal_type"] = parse_summary["signal_type"]
     summary = make_profile_summary(profile, len(events))
     return profile, summary
 
 
 def _build_detect_sync(file_bytes: bytes, profile: dict) -> tuple[list[Any], int, float]:
     from src.core.config import settings
+    from src.core.errors import ValidationError
+    from src.core.logging import get_logger
     from src.services.cleaning import clean
     from src.services.detection import detect as detect_sync
     from src.services.events import extract_events
     from src.services.io import parse_csv
 
-    df, _ = parse_csv(file_bytes, settings, expected_min_minutes=settings.min_detect_minutes)
-    df_clean = clean(df["water_level"].astype(float), settings)
+    df, parse_summary = parse_csv(
+        file_bytes, settings, expected_min_minutes=settings.min_detect_minutes
+    )
+
+    expected = profile.get("signal_type")
+    actual = parse_summary["signal_type"]
+    if expected is None:
+        # profile learned before signal types were recorded — cannot verify
+        get_logger("src.core.helper").warning(
+            "detect.signal_type_unknown", extra={"signal_type": actual}
+        )
+    elif expected != actual:
+        raise ValidationError(
+            f"signal type mismatch: profile was learned on '{expected}' but the "
+            f"uploaded CSV contains '{actual}'"
+        )
+
+    df_clean = clean(df[settings.signal_column].astype(float), settings)
     events = extract_events(df_clean, settings)
     alerts, confidence = detect_sync(events, df_clean, profile, settings)
     return alerts, int(len(events)), confidence

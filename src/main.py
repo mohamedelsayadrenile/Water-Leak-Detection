@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Water Leak Detection",
     version="0.1.0",
-    description="Behavior-based water tank leak detection from water_level signal.",
+    description="Behavior-based leak detection from a water_level or pressure_level signal.",
     lifespan=lifespan,
 )
 

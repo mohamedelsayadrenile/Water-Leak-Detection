@@ -14,6 +14,8 @@ class AlertOut(BaseModel):
 
 
 class ProfileSummary(BaseModel):
+    # None for profiles learned before signal types were recorded
+    signal_type: str | None = None
     n_days: int
     quiet_hours: list[int]
     global_duration: dict
