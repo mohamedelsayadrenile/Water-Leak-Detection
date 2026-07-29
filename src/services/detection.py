@@ -15,7 +15,6 @@ class Alert:
     end: str
     rule: str
     reason: str
-    score: float
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -50,7 +49,6 @@ def rule_a(ev_row: pd.Series, profile: dict, cfg: Settings) -> Alert | None:
             _iso(ev_row["end_time"]),
             "A",
             reason,
-            float(ev_row["duration_minutes"]),
         )
     return None
 
@@ -108,7 +106,6 @@ def rule_b(df_in: pd.DataFrame, profile: dict, cfg: Settings) -> list[Alert]:
                             ts_end.isoformat(),
                             "B",
                             reason,
-                            float(abs(res.slope)),
                         )
                     )
     alerts.sort(key=lambda a: a.start)
@@ -136,7 +133,6 @@ def rule_c(ev_row: pd.Series, cfg: Settings) -> Alert | None:
             _iso(ev_row["end_time"]),
             "C",
             reason,
-            float(ev_row["duration_minutes"]),
         )
     return None
 

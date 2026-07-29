@@ -10,7 +10,6 @@ class AlertOut(BaseModel):
     start: str
     end: str
     reason: str
-    score: float
 
 
 class ProfileSummary(BaseModel):
