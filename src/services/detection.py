@@ -90,7 +90,6 @@ def rule_b(df_in: pd.DataFrame, profile: dict, cfg: Settings) -> list[Alert]:
                 res.slope < 0
                 and res.pvalue < cfg.rule_b_alpha
                 and abs(res.slope) > abs(baseline) * cfg.rule_b_slope_mult
-                and abs(res.slope) > cfg.sensor_deadband / 5
             ):
                 ts_start = lvl.index[w0]
                 ts_end = lvl.index[w1 - 1]
