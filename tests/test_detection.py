@@ -17,15 +17,16 @@ def test_detect_no_leak_on_clean_day():
     events = extract_events(df_clean, cfg)
     profile = build_profile(events, df_clean, cfg)
 
-    # build a one-day series with the same cadence/index for detection
     day_df = slice_day(df, day_index=0)
     day_level = day_df.set_index("datetime")["water_level"].astype(float)
     day_clean = clean(day_level, cfg)
     day_events = extract_events(day_clean, cfg)
-    alerts = detect(day_events, day_clean, profile, cfg)
+    alerts, confidence = detect(day_events, day_clean, profile, cfg)
 
-    # on a normal day, no leak should fire (or only baseline-ish Rule B; accept zero)
     assert all(a.rule in ("A", "B", "C") for a in alerts)
+    for a in alerts:
+        assert 0.0 <= a.score <= 1.0
+    assert 0.0 <= confidence <= 1.0
 
 
 def test_detect_flags_rule_c_long_event():
@@ -36,18 +37,18 @@ def test_detect_flags_rule_c_long_event():
     events = extract_events(df_clean, cfg)
     profile = build_profile(events, df_clean, cfg)
 
-    # craft a long continuous drain (>4h) during a quiet hour -> rule A or C
-    day_df = slice_day(df, day_index=1).copy()
     import numpy as np
 
+    day_df = slice_day(df, day_index=1).copy()
     day_df["water_level"] = day_df["water_level"] - np.linspace(0, 3.0, len(day_df))
     day_df["water_level"] = day_df["water_level"].clip(lower=0.0)
     day_level = day_df.set_index("datetime")["water_level"].astype(float)
     day_clean = clean(day_level, cfg)
     day_events = extract_events(day_clean, cfg)
-    alerts = detect(day_events, day_clean, profile, cfg)
+    alerts, confidence = detect(day_events, day_clean, profile, cfg)
     rules = {a.rule for a in alerts}
     assert "C" in rules or "A" in rules
+    assert confidence >= settings.leak_confidence_threshold
 
 
 def test_detect_slow_leak_fires_rule_b_or_c():
@@ -64,7 +65,8 @@ def test_detect_slow_leak_fires_rule_b_or_c():
     day_level = day_df.set_index("datetime")["water_level"].astype(float)
     day_clean = clean(day_level, cfg)
     day_events = extract_events(day_clean, cfg)
-    alerts = detect(day_events, day_clean, profile, cfg)
+    alerts, confidence = detect(day_events, day_clean, profile, cfg)
     assert len(alerts) > 0
+    assert confidence >= settings.leak_confidence_threshold
     rules = {a.rule for a in alerts}
     assert rules & {"B", "C"}

@@ -11,6 +11,7 @@ from src.core.logging import get_logger
 from src.models.schemas.common import AlertOut
 from src.models.schemas.detect import DetectResponse
 from src.repositories.profile_store import get_profile_store
+from src.services.detection import severity_for
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -47,7 +48,7 @@ async def detect(
     profile = store.load_profile(profile_id)
 
     try:
-        alerts, n_events = await asyncio.to_thread(_build_detect_sync, data, profile)
+        alerts, n_events, confidence = await asyncio.to_thread(_build_detect_sync, data, profile)
     except ProfileNotFound as exc:
         raise HTTPException(status_code=404, detail=f"profile not found: {profile_id}") from exc
     except Exception as exc:
@@ -58,7 +59,8 @@ async def detect(
         logger.exception("detect.failed", extra={"profile_id": profile_id})
         raise HTTPException(status_code=500, detail=f"detection failed: {msg}") from exc
 
-    leak_detected = len(alerts) > 0
+    severity = severity_for(confidence, settings)
+    leak_detected = confidence >= settings.leak_confidence_threshold
     logger.info(
         "detect.complete",
         extra={
@@ -66,12 +68,16 @@ async def detect(
             "n_events": n_events,
             "n_alerts": len(alerts),
             "leak": leak_detected,
+            "confidence": confidence,
+            "severity": severity,
         },
     )
 
     return DetectResponse(
         profile_id=profile_id,
         leak_detected=leak_detected,
+        leak_confidence=confidence,
+        severity=severity,
         alerts=[AlertOut(**a.to_dict()) for a in alerts],
         n_events=n_events,
     )

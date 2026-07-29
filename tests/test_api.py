@@ -82,6 +82,8 @@ def test_detect_no_leak(clean_env):
     assert body["leak_detected"] is False
     assert body["n_events"] >= 0
     assert isinstance(body["alerts"], list)
+    assert 0.0 <= body["leak_confidence"] <= 1.0
+    assert body["severity"] == "none"
 
 
 def test_detect_unknown_profile(clean_env):
@@ -139,3 +141,7 @@ def test_detect_with_injected_leak(clean_env):
     body = d.json()
     assert body["leak_detected"] is True
     assert body["alerts"]
+    assert 0.0 <= body["leak_confidence"] <= 1.0
+    assert body["severity"] in ("low", "medium", "high")
+    for a in body["alerts"]:
+        assert 0.0 <= a["score"] <= 1.0

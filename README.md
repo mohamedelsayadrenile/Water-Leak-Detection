@@ -50,11 +50,27 @@ Pipeline (all pandas work runs off the event loop via `asyncio.to_thread`):
 3. **extract_events** — continuous drain segments → event rows.
 4. **build_profile** (learn only) — per-hour activity probability, per-hour
    duration p95, quiet hours, global duration stats, quiet baseline slope.
-5. **detect** (detect only, against the stored profile) — three rules:
-   - **A** unusual-hour long drain (start in a quiet hour, duration > p95 × 1.5).
-   - **B** slow night leak (sliding `linregress` over quiet hours: significant
-     negative slope exceeding baseline).
-   - **C** hard duration cap (> 4 h).
+5. **detect** (detect only, against the stored profile) — three rules, each
+   computing a **confidence score** in `[0, 1]` (soft gates). An alert is emitted
+   when `score ≥ rule_min_score`; the day-level `leak_confidence` is the
+   probabilistic union `1 - Π(1 - score_i)` of all alert scores; the verdict is
+   `leak_detected = leak_confidence ≥ leak_confidence_threshold`.
+
+   Scoring formulas:
+   - **Rule A** — unusual-hour long drain:
+     `score = unusualness · duration_term`, where
+     `unusualness = clamp01(1 - prob / rule_a_min_unusual_prob)` and
+     `duration_term = min(1, duration / (2 · rule_a_dur_mult · p95))`.
+   - **Rule B** — slow night leak (`linregress` slope over quiet-hour windows):
+     `score = significance · strength`, where
+     `significance = min(1, -log10(max(p, 1e-300)) / 10)` and
+     `strength = min(1, (|slope| / max(|baseline|·rule_b_slope_mult, 1e-5)) / 10)`.
+     Positive slopes score 0.
+   - **Rule C** — duration cap:
+     `score = min(1, duration / (2 · rule_c_max_duration_hours · 60))`.
+
+   Severity bands: `none (< threshold)` | `low (< 0.6)` | `medium (< 0.85)` |
+   `high (≥ 0.85)`.
 
 ## Background learning
 
@@ -80,7 +96,11 @@ All tunables live in `src/.env/.env` (loaded by pydantic-settings). No
 | `max_upload_mb` | 50 | upload size cap |
 | `task_timeout_minutes` | 60 | stale-task sweeper threshold |
 | `sweep_stale_tasks_on_startup` | true | run sweeper at app start |
-| `rule_c_max_duration_hours` | 4.0 | hard leak duration cap |
+| `rule_c_max_duration_hours` | 4.0 | leak duration cap (half of the score reference) |
+| `rule_min_score` | 0.3 | per-rule alert emission threshold (soft gate) |
+| `leak_confidence_threshold` | 0.5 | day-level verdict threshold for `leak_detected` |
+| `severity_medium_threshold` | 0.6 | low → medium severity boundary |
+| `severity_high_threshold` | 0.85 | medium → high severity boundary |
 | `profile_dir` / `uploads_dir` | `data/...` | storage roots |
 
 Threshold changes affect all stored profiles (global config is the single source
@@ -95,6 +115,12 @@ uv run ruff check src tests
 
 ## Notes / caveats
 
+- **Soft gates:** rules no longer fire on hard cliffs (prob < 0.25, duration >
+  p95 × 1.5, > 4 h, p < alpha). Evidence is now continuous; weak alerts can
+  appear in `alerts` while `leak_detected` stays false when day confidence is
+  below `leak_confidence_threshold`. The old Rule B `sensor_deadband/5` absolute
+  floor was removed — it blocked real slow leaks (the trained baseline +
+  p-value comparison already encodes the "is this slope real" test).
 - **Rule B on 1-day detects:** quiet-hour windows can be short in a single day,
   so Recall on the detect endpoint is inherently lower than the POC's 30-day
   run.

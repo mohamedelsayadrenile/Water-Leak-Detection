@@ -29,11 +29,16 @@ class Settings(BaseSettings):
     rule_a_dur_mult: float = 1.5
     # rule B
     rule_b_min_quiet_hours: float = 4.0
-    rule_b_alpha: float = 0.01
     rule_b_slope_mult: float = 2.0
     rule_b_step_minutes: int = 60
     # rule C
     rule_c_max_duration_hours: float = 4.0
+
+    # scoring / verdict
+    rule_min_score: float = 0.3
+    leak_confidence_threshold: float = 0.5
+    severity_medium_threshold: float = 0.6
+    severity_high_threshold: float = 0.85
 
     # API / storage
     profile_dir: Path = Path("data/profiles")
