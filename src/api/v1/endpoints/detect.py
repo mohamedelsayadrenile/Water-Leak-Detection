@@ -21,11 +21,10 @@ logger = get_logger(__name__)
 
 
 def _build_detect_sync(file_bytes: bytes, profile: dict) -> tuple[list[Any], int]:
-    cfg = settings.to_config()
-    df, _ = parse_csv(file_bytes, cfg, expected_min_minutes=settings.min_detect_minutes)
-    df_clean = clean(df["water_level"].astype(float), cfg)
-    events = extract_events(df_clean, cfg)
-    alerts = detect_sync(events, df_clean, profile, cfg)
+    df, _ = parse_csv(file_bytes, settings, expected_min_minutes=settings.min_detect_minutes)
+    df_clean = clean(df["water_level"].astype(float), settings)
+    events = extract_events(df_clean, settings)
+    alerts = detect_sync(events, df_clean, profile, settings)
     return alerts, int(len(events))
 
 

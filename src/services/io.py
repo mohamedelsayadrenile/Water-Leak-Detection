@@ -5,13 +5,13 @@ from typing import Any
 
 import pandas as pd
 
-from src.core.config import Config
+from src.core.config import Settings
 from src.core.errors import ValidationError
 
 
 def parse_csv(
     file_bytes: bytes,
-    cfg: Config,
+    cfg: Settings,
     expected_min_days: int | None = None,
     expected_min_minutes: int | None = None,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:

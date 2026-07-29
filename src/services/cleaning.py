@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from src.core.config import Config
+from src.core.config import Settings
 
 
 def classify_movement(delta: pd.Series, sensor_deadband: float) -> pd.Series:
@@ -33,7 +33,7 @@ def detect_refill(movement: pd.Series, consecutive_pos: int) -> np.ndarray:
     return refill_mask
 
 
-def clean(level_series: pd.Series, cfg: Config) -> pd.DataFrame:
+def clean(level_series: pd.Series, cfg: Settings) -> pd.DataFrame:
     """Stage 2 of the POC: smoothing + movement + refill mask.
 
     `level_series` must be a datetime-indexed Series of water_level (raw).

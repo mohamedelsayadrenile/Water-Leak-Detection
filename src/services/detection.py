@@ -5,7 +5,7 @@ from dataclasses import asdict, dataclass
 import pandas as pd
 from scipy.stats import linregress
 
-from src.core.config import Config
+from src.core.config import Settings
 
 
 @dataclass
@@ -24,7 +24,7 @@ def _iso(ts: pd.Timestamp) -> str:
     return pd.Timestamp(ts).isoformat()
 
 
-def rule_a(ev_row: pd.Series, profile: dict, cfg: Config) -> Alert | None:
+def rule_a(ev_row: pd.Series, profile: dict, cfg: Settings) -> Alert | None:
     h = int(ev_row["start_hour"])
     prob = (
         profile["hourly_active_prob"][str(h)]
@@ -58,14 +58,14 @@ def rule_a(ev_row: pd.Series, profile: dict, cfg: Config) -> Alert | None:
     return None
 
 
-def rule_a_safe(ev_row: pd.Series, profile: dict, cfg: Config) -> Alert | None:
+def rule_a_safe(ev_row: pd.Series, profile: dict, cfg: Settings) -> Alert | None:
     try:
         return rule_a(ev_row, profile, cfg)
     except Exception:
         return None
 
 
-def rule_b(df_in: pd.DataFrame, profile: dict, cfg: Config) -> list[Alert]:
+def rule_b(df_in: pd.DataFrame, profile: dict, cfg: Settings) -> list[Alert]:
     alerts: list[Alert] = []
     quiet = set(profile["quiet_hours"])
     isq = df_in.index.hour.isin(quiet) & ~df_in["is_refill"]
@@ -127,7 +127,7 @@ def rule_b(df_in: pd.DataFrame, profile: dict, cfg: Config) -> list[Alert]:
     return merged
 
 
-def rule_c(ev_row: pd.Series, cfg: Config) -> Alert | None:
+def rule_c(ev_row: pd.Series, cfg: Settings) -> Alert | None:
     if ev_row["duration_minutes"] > cfg.rule_c_max_duration_hours * 60:
         reason = (
             f"Rule C: event from {ev_row['start_time']} lasted "
@@ -144,7 +144,9 @@ def rule_c(ev_row: pd.Series, cfg: Config) -> Alert | None:
     return None
 
 
-def detect(events_in: pd.DataFrame, df_in: pd.DataFrame, profile: dict, cfg: Config) -> list[Alert]:
+def detect(
+    events_in: pd.DataFrame, df_in: pd.DataFrame, profile: dict, cfg: Settings
+) -> list[Alert]:
     alerts: list[Alert] = []
     if len(events_in) > 0:
         qh = set(profile["quiet_hours"])

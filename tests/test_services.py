@@ -9,7 +9,7 @@ from tests.fixtures import make_series
 
 def test_pipeline_extracts_events_and_profile():
     df = make_series(n_days=30)
-    cfg = settings.to_config()
+    cfg = settings
     level = df.set_index("datetime")["water_level"].astype(float)
     df_clean = clean(level, cfg)
     events = extract_events(df_clean, cfg)
@@ -27,7 +27,7 @@ def test_pipeline_extracts_events_and_profile():
 
 def test_quiet_hours_exclude_busy_hours():
     df = make_series(n_days=30)
-    cfg = settings.to_config()
+    cfg = settings
     level = df.set_index("datetime")["water_level"].astype(float)
     df_clean = clean(level, cfg)
     events = extract_events(df_clean, cfg)

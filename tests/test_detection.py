@@ -10,7 +10,7 @@ from tests.fixtures import inject_slow_leak, make_series, slice_day
 
 def test_detect_no_leak_on_clean_day():
     df = make_series(n_days=30, seed=1)
-    cfg = settings.to_config()
+    cfg = settings
 
     full = df.set_index("datetime")["water_level"].astype(float)
     df_clean = clean(full, cfg)
@@ -30,7 +30,7 @@ def test_detect_no_leak_on_clean_day():
 
 def test_detect_flags_rule_c_long_event():
     df = make_series(n_days=30, seed=2)
-    cfg = settings.to_config()
+    cfg = settings
     full = df.set_index("datetime")["water_level"].astype(float)
     df_clean = clean(full, cfg)
     events = extract_events(df_clean, cfg)
@@ -52,7 +52,7 @@ def test_detect_flags_rule_c_long_event():
 
 def test_detect_slow_leak_fires_rule_b_or_c():
     df = make_series(n_days=30, seed=3)
-    cfg = settings.to_config()
+    cfg = settings
     full = df.set_index("datetime")["water_level"].astype(float)
     df_clean = clean(full, cfg)
     events = extract_events(df_clean, cfg)

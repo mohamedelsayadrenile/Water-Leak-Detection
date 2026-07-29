@@ -3,10 +3,10 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from src.core.config import Config
+from src.core.config import Settings
 
 
-def extract_events(df_in: pd.DataFrame, cfg: Config) -> pd.DataFrame:
+def extract_events(df_in: pd.DataFrame, cfg: Settings) -> pd.DataFrame:
     """Stage 3 of the POC: continuous drain segments -> event rows."""
     mov = df_in["movement"].to_numpy()
     refill = df_in["is_refill"].to_numpy()

@@ -1,15 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import asdict
-
 import numpy as np
 import pandas as pd
 from scipy.stats import linregress
 
-from src.core.config import Config
+from src.core.config import Settings
 
 
-def build_profile(events: pd.DataFrame, df_clean: pd.DataFrame, cfg: Config) -> dict:
+def build_profile(events: pd.DataFrame, df_clean: pd.DataFrame, cfg: Settings) -> dict:
     """Stage 4 of the POC — learned user behaviour.
 
     Returns a json-serializable dict. Per the global-config decision, the cfg
@@ -94,8 +92,3 @@ def make_profile_summary(profile: dict, n_events: int) -> dict:
         "quiet_baseline_slope": profile["quiet_baseline_slope"],
         "n_events": int(n_events),
     }
-
-
-def profile_config_snapshot(cfg: Config) -> dict:
-    """Convenience kept for parity with the POC; not stored with the profile."""
-    return asdict(cfg) if hasattr(cfg, "__dataclass_fields__") else dict(cfg)
