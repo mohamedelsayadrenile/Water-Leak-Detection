@@ -1,31 +1,19 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from src.core.config import settings
 from src.core.errors import ProfileNotFound
+from src.core.helper import _build_detect_sync
 from src.core.logging import get_logger
 from src.models.schemas.common import AlertOut
 from src.models.schemas.detect import DetectResponse
 from src.repositories.profile_store import get_profile_store
-from src.services.cleaning import clean
-from src.services.detection import detect as detect_sync
-from src.services.events import extract_events
-from src.services.io import parse_csv
 
 router = APIRouter()
 logger = get_logger(__name__)
-
-
-def _build_detect_sync(file_bytes: bytes, profile: dict) -> tuple[list[Any], int]:
-    df, _ = parse_csv(file_bytes, settings, expected_min_minutes=settings.min_detect_minutes)
-    df_clean = clean(df["water_level"].astype(float), settings)
-    events = extract_events(df_clean, settings)
-    alerts = detect_sync(events, df_clean, profile, settings)
-    return alerts, int(len(events))
 
 
 @router.post("/detect", response_model=DetectResponse)

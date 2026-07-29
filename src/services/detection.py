@@ -6,6 +6,7 @@ import pandas as pd
 from scipy.stats import linregress
 
 from src.core.config import Settings
+from src.core.helper import _iso
 
 
 @dataclass
@@ -18,10 +19,6 @@ class Alert:
 
     def to_dict(self) -> dict:
         return asdict(self)
-
-
-def _iso(ts: pd.Timestamp) -> str:
-    return pd.Timestamp(ts).isoformat()
 
 
 def rule_a(ev_row: pd.Series, profile: dict, cfg: Settings) -> Alert | None:

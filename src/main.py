@@ -1,37 +1,16 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from datetime import UTC, timedelta
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.v1.router import v1_router
 from src.core.config import settings
+from src.core.helper import _sweep_stale_tasks
 from src.core.logging import get_logger, setup_logging
-from src.repositories.profile_store import get_profile_store
 
 logger = get_logger(__name__)
-
-
-def _sweep_stale_tasks() -> int:
-    store = get_profile_store()
-    cutoff = timedelta(minutes=settings.task_timeout_minutes)
-    stale = store.list_stale(cutoff)
-    from datetime import datetime
-
-    for meta in stale:
-        store.update_meta(
-            meta["profile_id"],
-            status="failed",
-            finished_at=datetime.now(UTC).isoformat(),
-            error=f"task stale > {cutoff}",
-        )
-        logger.warning(
-            "learn.swept",
-            extra={"profile_id": meta["profile_id"]},
-        )
-    return len(stale)
 
 
 @asynccontextmanager

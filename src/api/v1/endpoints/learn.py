@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
 
 from src.core.config import settings
+from src.core.helper import _check_header, _now_iso
 from src.core.logging import get_logger
 from src.models.schemas.learn import LearnResponse
 from src.repositories.profile_store import get_profile_store
@@ -13,19 +13,6 @@ from src.services.learn_task import learn_profile_task
 
 router = APIRouter()
 logger = get_logger(__name__)
-
-
-def _now_iso() -> str:
-    return datetime.now(UTC).isoformat()
-
-
-def _check_header(peek: bytes) -> None:
-    first_line = peek.split(b"\n", 1)[0].decode("utf-8", errors="ignore").lower()
-    if "datetime" not in first_line or "water_level" not in first_line:
-        raise HTTPException(
-            status_code=422,
-            detail="CSV header must contain columns: datetime, water_level",
-        )
 
 
 @router.post("/learn", response_model=LearnResponse, status_code=202)

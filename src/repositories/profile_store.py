@@ -1,27 +1,12 @@
 from __future__ import annotations
 
 import json
-import re
+import time
 from datetime import timedelta
-from typing import Any
 
 from src.core.config import settings
 from src.core.errors import ProfileNotFound
-
-PROFILE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
-
-
-def _validate_profile_id(profile_id: str) -> None:
-    if not PROFILE_ID_RE.match(profile_id):
-        raise ValueError(f"invalid profile_id: {profile_id!r}")
-
-
-def _meta_path(profile_id: str, root) -> Any:
-    return root / f"{profile_id}.meta.json"
-
-
-def _profile_path(profile_id: str, root) -> Any:
-    return root / f"{profile_id}.json"
+from src.core.helper import _meta_path, _profile_path, _validate_profile_id
 
 
 class ProfileStore:
@@ -66,8 +51,6 @@ class ProfileStore:
         return json.loads(path.read_text())
 
     def list_stale(self, older_than: timedelta) -> list[dict]:
-        import time
-
         cutoff_seconds = time.time() - older_than.total_seconds()
         stale: list[dict] = []
         for p in self.dir.glob("*.meta.json"):
