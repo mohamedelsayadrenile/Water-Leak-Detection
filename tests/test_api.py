@@ -8,16 +8,22 @@ from src.main import app
 from tests.fixtures import df_to_csv_bytes, make_series
 
 
-def _wait_until_ready(client: TestClient, profile_id: str, timeout: float = 30.0) -> dict:
+def _poll_until_done(client: TestClient, profile_id: str, timeout: float = 30.0):
+    """Poll until the job leaves 202; returns the terminal response as-is."""
     deadline = time.time() + timeout
     while time.time() < deadline:
         r = client.get(f"/v1/profiles/{profile_id}")
-        assert r.status_code in (200, 202), r.text
-        meta = r.json()
-        if meta["status"] in ("ready", "failed"):
-            return meta
+        if r.status_code != 202:
+            return r
+        assert r.json()["status"] in ("pending", "running"), r.text
         time.sleep(0.1)
     raise AssertionError(f"profile {profile_id} did not finish in time")
+
+
+def _wait_until_ready(client: TestClient, profile_id: str, timeout: float = 30.0) -> dict:
+    r = _poll_until_done(client, profile_id, timeout)
+    assert r.status_code == 200, r.text
+    return r.json()
 
 
 def test_learn_happy_path(clean_env):
@@ -54,11 +60,85 @@ def test_learn_rejects_too_short(clean_env):
     client = TestClient(app)
     df = make_series(n_days=10)
     r = client.post("/v1/learn", files={"file": ("d.csv", df_to_csv_bytes(df), "text/csv")})
-    # 422 because background task fails — but the request itself returns 202 with pending,
-    # the failure surfaces via polling. Check the eventual status.
+    # the upload request itself returns 202 with pending; the rejection surfaces on poll
     assert r.status_code == 202
-    meta = _wait_until_ready(client, r.json()["profile_id"])
+    pid = r.json()["profile_id"]
+
+    poll = _poll_until_done(client, pid)
+    assert poll.status_code == 422, poll.text
+    detail = poll.json()["detail"]
+    assert detail["status"] == "failed"
+    assert detail["type"] == "validation"
+    assert "too short" in detail["detail"]
+
+    # the stored meta still records the failure for anyone reading it directly
+    from src.repositories.profile_store import get_profile_store
+
+    meta = get_profile_store().load_meta(pid)
     assert meta["status"] == "failed"
+    assert meta["error_type"] == "validation"
+    assert meta["finished_at"]
+
+
+def test_learn_rejects_null_run_longer_than_limit(clean_env):
+    from src.core.config import settings
+
+    client = TestClient(app)
+    df = make_series(n_days=30)
+    df.loc[100 : 100 + settings.max_interpolate_samples, "water_level"] = None
+    r = client.post("/v1/learn", files={"file": ("d.csv", df_to_csv_bytes(df), "text/csv")})
+    assert r.status_code == 202
+
+    poll = _poll_until_done(client, r.json()["profile_id"])
+    assert poll.status_code == 422, poll.text
+    assert "unfillable null values" in poll.json()["detail"]["detail"]
+
+
+def test_learn_interpolates_short_null_run(clean_env):
+    client = TestClient(app)
+    df = make_series(n_days=30)
+    df.loc[100:102, "water_level"] = None  # 3 nulls, under the limit
+    r = client.post("/v1/learn", files={"file": ("d.csv", df_to_csv_bytes(df), "text/csv")})
+    meta = _wait_until_ready(client, r.json()["profile_id"])
+    assert meta["status"] == "ready"
+
+
+def test_profile_status_unknown_and_malformed_id(clean_env):
+    client = TestClient(app)
+    assert client.get(f"/v1/profiles/{'a' * 32}").status_code == 404
+    assert client.get("/v1/profiles/not-a-hex-id").status_code == 422
+
+
+def test_profile_status_pending_returns_202(clean_env):
+    from src.repositories.profile_store import get_profile_store
+
+    pid = "b" * 32
+    get_profile_store().write_meta(pid, {"profile_id": pid, "status": "running"})
+
+    r = TestClient(app).get(f"/v1/profiles/{pid}")
+    assert r.status_code == 202
+    assert r.json()["status"] == "running"
+
+
+def test_profile_status_internal_failure_returns_500(clean_env):
+    from src.repositories.profile_store import get_profile_store
+
+    pid = "c" * 32
+    get_profile_store().write_meta(
+        pid,
+        {
+            "profile_id": pid,
+            "status": "failed",
+            "error": "/abs/path/leaked.csv missing",
+            "error_type": "internal",
+        },
+    )
+
+    r = TestClient(app).get(f"/v1/profiles/{pid}")
+    assert r.status_code == 500
+    # the internal error string must not reach the client
+    assert "leaked.csv" not in r.text
+    assert r.json()["detail"]["detail"] == "profile learning failed"
 
 
 def test_detect_no_leak(clean_env):

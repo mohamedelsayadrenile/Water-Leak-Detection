@@ -57,7 +57,8 @@ src/
 
 Pipeline (all pandas work runs off the event loop via `asyncio.to_thread`):
 
-1. **parse_csv** — validate schema, cadence, length; dedup; interpolate ≤3-sample gaps.
+1. **parse_csv** — validate schema, cadence, length; dedup; interpolate null runs up
+   to `max_interpolate_samples` long and reject anything longer.
 2. **clean** — rolling median, deadband movement classification, refill mask.
 3. **extract_events** — continuous drain segments → event rows.
 4. **build_profile** (learn only) — per-hour activity probability, per-hour
@@ -91,7 +92,21 @@ pending `data/profiles/{profile_id}.meta.json`, enqueues
 `learn_profile_task` via FastAPI `BackgroundTasks`, and returns immediately.
 The task runs the pipeline in a worker thread, writes the profile, flips meta to
 `ready` (with summary), and deletes the staged CSV. On failure meta becomes
-`failed` with the error message.
+`failed` with the error message and an `error_type` of `validation` (the upload was
+rejected) or `internal` (anything else).
+
+The poll endpoint puts that outcome in the HTTP status, so a client checking only
+the status code cannot mistake a failed job for a healthy one:
+
+| meta status | poll response |
+|---|---|
+| `pending` / `running` | `202 Accepted` with the status body |
+| `ready` | `200 OK` with the profile summary |
+| `failed`, `error_type = validation` | `422` carrying the CSV rejection message |
+| `failed`, `error_type = internal` | `500` with a generic message (details stay in the logs) |
+
+A `profile_id` that is not 32 lowercase hex characters is a `422`; a well-formed
+but unknown one is a `404`.
 
 At startup the app sweeps any `pending`/`running` meta older than
 `task_timeout_minutes` and marks them `failed` (self-healing after crashes).
@@ -105,6 +120,7 @@ All tunables live in `src/.env` (loaded by pydantic-settings). No
 |---|---|---|
 | `signal_source_columns` | `("water_level", "pressure_level")` | accepted CSV measurement columns; exactly one must be present |
 | `signal_column` | `signal` | canonical internal column name the whole pipeline uses |
+| `max_interpolate_samples` | 6 | longest run of consecutive nulls that is interpolated; longer runs are a 422 |
 | `sensor_deadband` | 0.005 | movement below this is `flat`. **Magnitude-dependent** — retune for a pressure deployment, whose units differ from level |
 | `min_learn_days` | 25 | reject learn CSVs shorter than this |
 | `min_detect_minutes` | 1440 | reject detect CSVs shorter than this |

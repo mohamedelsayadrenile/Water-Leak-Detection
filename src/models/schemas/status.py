@@ -14,3 +14,5 @@ class ProfileStatusResponse(BaseModel):
     finished_at: str | None = None
     summary: ProfileSummary | None = None
     error: str | None = None
+    # absent on metas written before failures were classified; treated as "internal"
+    error_type: Literal["validation", "internal"] | None = None

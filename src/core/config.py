@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     # cleaning
     rolling_window: int = 5
     refill_consecutive_pos: int = 3
+    # consecutive NaN samples that may be interpolated away; longer runs are rejected
+    max_interpolate_samples: int = 6
 
     # events
     min_event_samples: int = 2

@@ -23,7 +23,10 @@ async def detect(
     profile_id: str = Form(...),
 ) -> DetectResponse:
     store = get_profile_store()
-    meta = store.load_meta(profile_id)
+    try:
+        meta = store.load_meta(profile_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"invalid profile_id: {profile_id}") from exc
     if meta is None:
         raise HTTPException(status_code=404, detail=f"profile not found: {profile_id}")
 

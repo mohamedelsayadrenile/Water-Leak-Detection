@@ -43,11 +43,9 @@ def parse_csv(
     if raw["datetime"].isna().any():
         raise ValidationError("datetime column contains null values")
 
-    if raw[signal].isna().any():
-        # interpolate small gaps AFTER reindex; for now reject fully-missing rows
-        n_missing = int(raw[signal].isna().sum())
-    else:
-        n_missing = 0
+    # nulls carried by the uploaded rows themselves; handled below, after the reindex,
+    # so they take the same interpolate-or-reject path as rows inserted by asfreq
+    n_null = int(raw[signal].isna().sum())
 
     raw = raw.sort_values("datetime").reset_index(drop=True)
     n_dup = int(raw["datetime"].duplicated().sum())
@@ -65,16 +63,22 @@ def parse_csv(
     expected_td = pd.Timedelta(seconds=cfg.sampling_interval_seconds)
     df = raw.set_index("datetime").sort_index()
     df = df.asfreq(expected_td)
-    n_gaps = int(df[signal].isna().sum())
+    if df.empty:
+        raise ValidationError("CSV contains no usable rows")
+
+    # every NaN cell in the reindexed frame: nulls the upload carried plus rows asfreq
+    # inserted for missing timestamps
+    n_nan = int(df[signal].isna().sum())
     n_filled = 0
-    if n_gaps:
-        n_filled = min(n_gaps, 3 * int(n_gaps))
-        df[signal] = df[signal].interpolate(method="time", limit=3)
+    if n_nan:
+        limit = cfg.max_interpolate_samples
+        df[signal] = df[signal].interpolate(method="time", limit=limit)
         still_nan = int(df[signal].isna().sum())
+        n_filled = n_nan - still_nan
         if still_nan:
             raise ValidationError(
-                f"unfillable gaps in series: {still_nan} samples still NaN after "
-                f"interpolation (limit=3)"
+                f"signal column has {still_nan} unfillable null values: runs longer "
+                f"than {limit} consecutive samples cannot be interpolated"
             )
 
     summary: dict[str, Any] = {
@@ -85,7 +89,8 @@ def parse_csv(
         "inferred_interval_min": inferred_interval_min,
         "cadence_regular": cadence_regular,
         "duplicate_rows": n_dup,
-        "missing_values": n_missing + n_gaps,
+        "null_values": n_null,
+        "missing_values": n_nan,
         "filled_gaps": n_filled,
         "signal_min": float(df[signal].min()),
         "signal_max": float(df[signal].max()),

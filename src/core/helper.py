@@ -63,13 +63,20 @@ def _profile_path(profile_id: str, root: Path) -> Path:
 def _build_profile_sync(profile_id: str, upload_path: Path) -> tuple[dict, dict]:
     # local imports avoid a core <-> services layering cycle at import time
     from src.core.config import settings
+    from src.core.errors import ValidationError
     from src.services.cleaning import clean
     from src.services.events import extract_events
     from src.services.io import parse_csv
     from src.services.profile import build_profile, make_profile_summary
 
+    try:
+        file_bytes = upload_path.read_bytes()
+    except OSError as exc:
+        # never surface the staged path — the error string reaches the client via meta
+        raise ValidationError("staged upload is no longer available") from exc
+
     df, parse_summary = parse_csv(
-        upload_path.read_bytes(),
+        file_bytes,
         settings,
         expected_min_days=settings.min_learn_days,
     )
