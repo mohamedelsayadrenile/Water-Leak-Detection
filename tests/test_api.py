@@ -91,7 +91,7 @@ def test_learn_rejects_null_run_longer_than_limit(clean_env):
 
     poll = _poll_until_done(client, r.json()["profile_id"])
     assert poll.status_code == 422, poll.text
-    assert "unfillable null values" in poll.json()["detail"]["detail"]
+    assert "unfillable gap" in poll.json()["detail"]["detail"]
 
 
 def test_learn_interpolates_short_null_run(clean_env):

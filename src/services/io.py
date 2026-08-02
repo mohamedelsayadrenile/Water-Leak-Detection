@@ -9,6 +9,17 @@ from src.core.config import Settings
 from src.core.errors import ValidationError
 
 
+def _longest_nan_run(mask: pd.Series) -> tuple[pd.Timestamp | None, int]:
+    """(start timestamp, length) of the longest run of consecutive True values."""
+    if not mask.any():
+        return None, 0
+    # every False increments the counter, so consecutive Trues share a group id
+    groups = (~mask).cumsum()[mask]
+    lengths = groups.value_counts()
+    run = groups[groups == lengths.idxmax()]
+    return run.index[0], int(lengths.max())
+
+
 def parse_csv(
     file_bytes: bytes,
     cfg: Settings,
@@ -72,14 +83,18 @@ def parse_csv(
     n_filled = 0
     if n_nan:
         limit = cfg.max_interpolate_samples
-        df[signal] = df[signal].interpolate(method="time", limit=limit)
-        still_nan = int(df[signal].isna().sum())
-        n_filled = n_nan - still_nan
-        if still_nan:
+        start, longest = _longest_nan_run(df[signal].isna())
+        if longest > limit:
             raise ValidationError(
-                f"signal column has {still_nan} unfillable null values: runs longer "
-                f"than {limit} consecutive samples cannot be interpolated"
+                f"signal column has an unfillable gap of {longest} consecutive null "
+                f"values starting at {start.isoformat()}: at most {limit} in a row "
+                f"can be interpolated"
             )
+        # run lengths are already vetted, so no `limit` here; limit_direction="both"
+        # is what lets a run at the very start of the series be filled at all — the
+        # forward-only default can never fill leading nulls, however few there are
+        df[signal] = df[signal].interpolate(method="time", limit_direction="both")
+        n_filled = n_nan - int(df[signal].isna().sum())
 
     summary: dict[str, Any] = {
         "signal_type": signal_type,
