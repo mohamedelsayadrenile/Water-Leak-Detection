@@ -21,3 +21,12 @@ class ProfileSummary(BaseModel):
     global_duration: dict
     quiet_baseline_slope: float
     n_events: int
+    # Extended usage summary. Absent on profiles learned before these fields
+    # existed — left null/empty rather than backfilled.
+    scheduled_usage_hours: list[int] = []
+    average_usage_amount: float | None = None
+    refill_periods: list[int] = []
+    # unit follows signal_type: metres for water_level, bar for pressure_level
+    min_tank_level: float | None = None
+    average_usage_duration: float = 0.0
+    lowest_usage_hours: list[int] = []

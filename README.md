@@ -111,6 +111,34 @@ but unknown one is a `404`.
 At startup the app sweeps any `pending`/`running` meta older than
 `task_timeout_minutes` and marks them `failed` (self-healing after crashes).
 
+### Profile summary fields
+
+`GET /v1/profiles/{profile_id}` returns a `summary` (only once `status == "ready"`)
+with the learned usage profile. The schedule/duration fields are:
+
+| Field | Meaning |
+|---|---|
+| `quiet_hours` | hours of the day with the lowest activity probability |
+| `global_duration` | `{mean, median, p95, max}` of usage-event duration in minutes |
+| `quiet_baseline_slope` | median signal slope over quiet-hour windows (drift baseline) |
+| `n_events` | number of usage events seen across the learning period |
+| `scheduled_usage_hours` | the user's typical usage hours — the complement of `quiet_hours` (activity probability > quiet threshold) |
+| `average_usage_amount` | average water volume consumed per usage event (mean event `total_drop`); unit follows `signal_type` |
+| `average_usage_duration` | average duration of usage events in minutes (`global_duration["mean"]`, surfaced as its own field) |
+| `refill_periods` | typical refill hours — hours whose per-hour refill probability exceeds the cross-hour mean |
+| `min_tank_level` | lowest observed signal value during the learning period; unit follows `signal_type` (metres for `water_level`, bar for `pressure_level`) |
+| `lowest_usage_hours` | the six hours of the day with the lowest water usage |
+
+**`lowest_usage_hours` methodology:** for each of the 24 hours, sum the `total_drop`
+of every usage event that *started* in that hour, then divide by the number of
+learning days — this gives the average water volume consumed during that hour of
+the day. Rank the 24 hours by that volume ascending (ties break by hour index) and
+take the six smallest. Quiet hours naturally surface here because their summed drop
+volume is near zero.
+
+Profiles learned before these fields were added return them as `null` / empty
+rather than being backfilled.
+
 ## Configuration
 
 All tunables live in `src/.env` (loaded by pydantic-settings). No
