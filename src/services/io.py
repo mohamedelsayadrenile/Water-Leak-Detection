@@ -59,6 +59,7 @@ def parse_csv(
     n_dup = int(raw["datetime"].duplicated().sum())
     raw = raw.drop_duplicates("datetime")
 
+    # check if all the intervals are the same, and if so, what that interval is
     dt_diff = raw["datetime"].diff().dt.total_seconds().dropna()
     inferred_interval_min = float(dt_diff.median() / 60.0) if len(dt_diff) else 0.0
     cadence_regular = bool(len(dt_diff) > 0 and (dt_diff == cfg.sampling_interval_seconds).all())
