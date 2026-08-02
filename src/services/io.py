@@ -51,9 +51,6 @@ def parse_csv(
     raw = raw.rename(columns={signal_type: cfg.signal_column})
     signal = cfg.signal_column
 
-    if raw["datetime"].isna().any():
-        raise ValidationError("datetime column contains null values")
-
     # nulls carried by the uploaded rows themselves; handled below, after the reindex,
     # so they take the same interpolate-or-reject path as rows inserted by asfreq
     n_null = int(raw[signal].isna().sum())
